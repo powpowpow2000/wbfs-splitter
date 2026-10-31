@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WBFS Splitter</title>
+<style>
+body{font-family:sans-serif;background:#151923;color:#eee;padding:20px;max-width:600px;margin:auto}
+h1{font-size:25px}
+.box{background:#252d3b;padding:18px;border-radius:12px;margin:18px 0}
+button{background:#3985ed;color:white;border:0;padding:13px 18px;border-radius:8px;font-size:16px;margin:8px 0}
+button:disabled{opacity:.4}
+input{max-width:100%;margin:12px 0}
+.part{display:block;background:#303c50;padding:12px;border-radius:8px;margin:10px 0;color:white;text-decoration:none}
+small{color:#aab5c5}
+</style>
+</head>
+<body>
+<h1>WBFS Splitter</h1>
+<p>WBFSファイルを分割します。</p>
+
+<div class="box">
+  <b>① WBFSファイルを選択</b><br>
+  <input type="file" id="file" accept=".wbfs">
+  <p id="info">ファイル未選択</p>
+  <button id="split" disabled>分割する</button>
+</div>
+
+<div class="box">
+  <b>② 分割ファイルを保存</b>
+  <div id="output">ここに分割結果が表示されます。</div>
+</div>
+
+<small>処理はブラウザ内で行います。ファイルは外部サーバーへ送信されません。</small>
+
+<script>
+const fileInput = document.getElementById('file');
+const splitButton = document.getElementById('split');
+const info = document.getElementById('info');
+const output = document.getElementById('output');
+
+let selectedFile = null;
+const CHUNK_SIZE = 1024 * 1024 * 1024;
+
+fileInput.addEventListener('change', async () => {
+  selectedFile = fileInput.files[0];
+  output.innerHTML = '';
+
+  if (!selectedFile) return;
+
+  const header = await selectedFile.slice(0, 4).arrayBuffer();
+  const magic = new TextDecoder().decode(header);
+
+  if (magic !== 'WBFS') {
+    info.textContent = 'WBFSファイルではないようです。';
+    splitButton.disabled = true;
+    return;
+  }
+
+  const count = Math.ceil(selectedFile.size / CHUNK_SIZE);
+
+  info.textContent =
+    selectedFile.name + ' / ' +
+    (selectedFile.size / 1024 / 1024 / 1024).toFixed(2) +
+    ' GB / ' + count + ' 分割予定';
+
+  splitButton.disabled = count > 10;
+  if (count > 10) info.textContent += '（10分割を超えています）';
+});
+
+splitButton.addEventListener('click', () => {
+  if (!selectedFile) return;
+
+  output.innerHTML = '';
+
+  const baseName = selectedFile.name.replace(/\.wbfs$/i, '');
+  const count = Math.ceil(selectedFile.size / CHUNK_SIZE);
+
+  for (let i = 0; i < count; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, selectedFile.size);
+    const ext = i === 0 ? '.wbfs' : '.wbf' + i;
+    const name = baseName + ext;
+
+    const button = document.createElement('button');
+    button.className = 'part';
+    button.textContent =
+      name + ' を保存 (' +
+      ((end - start) / 1024 / 1024).toFixed(0) + ' MB)';
+
+    button.addEventListener('click', () => {
+      const blob = selectedFile.slice(start, end, 'application/octet-stream');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    });
+
+    output.appendChild(button);
+  }
+});
+</script>
+</body>
+</html>
